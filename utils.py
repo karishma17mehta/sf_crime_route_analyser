@@ -18,12 +18,16 @@ def geocode_address(address, api_key):
 
 def get_route_coords(start, end, client):
     try:
-        print(f"🧭 Getting route from {start} to {end}")
+        print(f"🧭 Requesting route from {start} to {end}")
         route = client.directions(
             coordinates=[start, end],
-            profile='driving-car',
+            profile='foot-walking',
             format='geojson'
         )
+        if "routes" not in route or not route["routes"]:
+            print("❌ No route returned in response!")
+            return None
+
         coords = convert.decode_polyline(route['routes'][0]['geometry'])['coordinates']
         print(f"✅ Route found with {len(coords)} points.")
         return coords
