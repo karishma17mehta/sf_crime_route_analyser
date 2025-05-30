@@ -1,13 +1,14 @@
+
 import requests
 import json
 from confluent_kafka import Producer
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 import certifi
 import os
 from dotenv import load_dotenv
 
-load_dotenv("py.env")
+load_dotenv("py11.env")
 
 conf = {
     'bootstrap.servers': os.getenv('KAFKA_BOOTSTRAP'),
@@ -22,16 +23,18 @@ producer = Producer(conf)
 # SF Crime API
 SF_CRIME_API = "https://data.sfgov.org/resource/wg3w-h783.json"
 
-def fetch_recent_crimes(minutes_ago=10):
-    since_time = (datetime.utcnow() - timedelta(minutes=minutes_ago)).isoformat()
+def fetch_recent_crimes(minutes_ago=120):
+    since_time = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).isoformat()
     query = {
-        "$where": f"incident_datetime > '{since_time}'",
-        "$limit": 1000,
+        #"$where": f"incident_datetime > '{since_time}'",
+        "$limit": 5,
         "$order": "incident_datetime DESC"
     }
     response = requests.get(SF_CRIME_API, params=query)
-    return response.json() if response.status_code == 200 else []
-
+    crimes = response.json() if response.status_code == 200 else []
+    print(f"Fetched {len(crimes)} crimes since {since_time}")
+    return crimes
+    
 def stream_to_kafka():
     while True:
         crimes = fetch_recent_crimes()
