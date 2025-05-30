@@ -4,7 +4,7 @@ import folium
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 
-def fetch_live_crimes(minutes_ago=1440):
+def fetch_live_crimes(minutes_ago=2880):
     since_time = (datetime.now() - timedelta(minutes=minutes_ago)).isoformat()
     url = "https://data.sfgov.org/resource/wg3w-h783.json"
     params = {
