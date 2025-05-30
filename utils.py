@@ -20,7 +20,7 @@ def geocode_address(address, api_key):
 
 def get_route_coords(start, end, client):
     try:
-        print(f"🛣️ Requesting route from {start} to {end}")
+        print(f"🛣️ Requesting route from '{start}' to '{end}'")
         start_coords = client.pelias_search(start)["features"][0]["geometry"]["coordinates"]
         end_coords = client.pelias_search(end)["features"][0]["geometry"]["coordinates"]
         print(f"📍 Start: {start_coords}, End: {end_coords}")
@@ -41,14 +41,8 @@ def assess_route(coords, hour, minute, day_str, clf, ohe, day_labels):
     day_encoded = ohe.transform([[day_str]])
     route_features = []
     for lon, lat in coords:
-        row = {
-            "hour": hour,
-            "minute": minute,
-            "latitude": lat,
-            "longitude": lon
-        }
         row_encoded = np.concatenate(
-            [np.array([[row['hour'], row['minute'], row['latitude'], row['longitude']]]), day_encoded],
+            [np.array([[hour, minute, lat, lon]]), day_encoded],
             axis=1
         )
         route_features.append(row_encoded[0])
@@ -61,40 +55,48 @@ def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, o
         return None
 
     original_risk, original_scores = assess_route(coords, hour, minute, day_str, clf, ohe, day_labels)
+
     if original_risk <= 0.5:
         return {
             "coords": coords,
             "avg_risk": original_risk,
             "risk_per_point": original_scores,
-            "was_rerouted": False
+            "was_rerouted": False,
+            "original_risk": original_risk
         }
 
     print("⚠️ High risk detected. Attempting reroute...")
 
+    # Simple reroute: shift latitudes northward
     lat_offset = buffer
-    reroute_coords = [(lon, lat + lat_offset) for lon, lat in coords]
+    rerouted_coords = [(lon, lat + lat_offset) for lon, lat in coords]
 
-    rerouted_risk, rerouted_scores = assess_route(reroute_coords, hour, minute, day_str, clf, ohe, day_labels)
+    rerouted_risk, rerouted_scores = assess_route(rerouted_coords, hour, minute, day_str, clf, ohe, day_labels)
+
     return {
-        "coords": reroute_coords,
+        "coords": rerouted_coords,
         "avg_risk": rerouted_risk,
         "risk_per_point": rerouted_scores,
         "was_rerouted": True,
+        "original_risk": original_risk,
         "buffer_used": buffer
     }
 
 def plot_route_on_map(coords, start, end, risk_score, risk_per_point, rerouted=False):
-    # Use first route point as [lat, lon]
-    first_point = coords[0]
-    m = folium.Map(location=[first_point[1], first_point[0]], zoom_start=13)
+    if coords is None or len(coords) == 0:
+        print("❌ No coordinates to plot.")
+        return folium.Map(location=[37.7749, -122.4194], zoom_start=12)  # default to SF
+
+    # Map centered on first route point
+    lon, lat = coords[0]
+    m = folium.Map(location=[lat, lon], zoom_start=13)
 
     folium.Marker([start[1], start[0]], tooltip="Start", icon=folium.Icon(color="green")).add_to(m)
     folium.Marker([end[1], end[0]], tooltip="End", icon=folium.Icon(color="red")).add_to(m)
 
-    # Correct order: lat, lon for Folium
-    route_line = [(lat, lon) for lon, lat in coords]
-    color = "red" if risk_score > 0.5 else "green"
-    folium.PolyLine(route_line, color=color, weight=5, tooltip="Route").add_to(m)
+    route_line = [(lat, lon) for lon, lat in coords]  # folium uses lat, lon
+    route_color = "red" if risk_score > 0.5 else "green"
+    folium.PolyLine(route_line, color=route_color, weight=5, tooltip="Route").add_to(m)
 
     for (lon, lat), risk in zip(coords, risk_per_point):
         folium.CircleMarker(
