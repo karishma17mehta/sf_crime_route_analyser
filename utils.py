@@ -21,7 +21,7 @@ def get_route_coords(start, end, client):
         print(f"🧭 Requesting route from {start} to {end}")
         route = client.directions(
             coordinates=[start, end],
-            profile='foot-walking',
+            profile='driving-car',
             format='geojson'
         )
         if "routes" not in route or not route["routes"]:
