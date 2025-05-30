@@ -7,35 +7,46 @@ import os
 from dotenv import load_dotenv
 import pydeck as pdk
 
-# Load environment variables (for local testing)
-load_dotenv("py11.env")
-
-# ORS client (switch between local or Streamlit Cloud secrets)
+# Load environment variables
+load_dotenv("py11.env")  # For local testing
 ORS_API_KEY = os.getenv("ORS_API_KEY") or st.secrets["ORS_API_KEY"]
+
+# ORS client
 ors = openrouteservice.Client(key=ORS_API_KEY)
 
-# Load model and encoder
+# Load ML model and encoder
 clf = joblib.load("models/risk_model.joblib")
 ohe = joblib.load("models/encoder.joblib")
 
 # Streamlit UI
 st.title("🛣️ Safest Route Recommender")
-start = st.text_input("Start location", "Union Square, San Francisco")
-end = st.text_input("End location", "Golden Gate Park, San Francisco")
+start = st.text_input("Start location", "123 Market Street, San Francisco")
+end = st.text_input("End location", "3250 16th Street, San Francisco")
 
 if st.button("Get Safest Route"):
-    with st.spinner("🧠 Scoring your route..."):
-        # Get coordinates
-        start_coords = ors.pelias_search(start)["features"][0]["geometry"]["coordinates"]
-        end_coords = ors.pelias_search(end)["features"][0]["geometry"]["coordinates"]
-        coords = [start_coords, end_coords]
+    with st.spinner("🧠 Calculating safest path..."):
+        try:
+            # Get coordinates
+            start_coords = ors.pelias_search(start)["features"][0]["geometry"]["coordinates"]
+            end_coords = ors.pelias_search(end)["features"][0]["geometry"]["coordinates"]
+            coords = [start_coords, end_coords]
+            st.info(f"📍 From: {start_coords}, To: {end_coords}")
+        except Exception as e:
+            st.error(f"❌ Failed to locate address: {e}")
+            st.stop()
 
-        # Get walking route as geojson
-        routes = ors.directions(coords, profile='foot-walking', format='geojson')
-        route = routes['features'][0]
+        try:
+            route = ors.directions(coords, profile='foot-walking', format='geojson')['features'][0]
+        except openrouteservice.exceptions.ApiError as e:
+            st.error(f"❌ ORS API error: {e}")
+            st.stop()
+
         points = route['geometry']['coordinates']
+        if not points:
+            st.error("❌ No route returned. Try a different location.")
+            st.stop()
 
-        # Sample route and predict risk
+        # Score risk at sampled points
         risks = []
         for lon, lat in points[::10]:  # Sample every 10th point
             hour = datetime.now().hour
@@ -54,12 +65,12 @@ if st.button("Get Safest Route"):
             risk = clf.predict_proba(X)[0][1]
             risks.append(risk)
 
-        # Total risk
-        total_risk = sum(risks)
-        st.success(f"✅ Total risk score: {round(total_risk, 2)}")
+        total_risk = round(sum(risks), 2)
+        st.success(f"✅ Total risk score: {total_risk}")
 
-        # Map route
-        line = pd.DataFrame(points, columns=['lon', 'lat'])
+        # Prepare map data
+        line = pd.DataFrame(points, columns=['lon', 'lat']).astype(float)
+
         st.pydeck_chart(pdk.Deck(
             initial_view_state=pdk.ViewState(
                 latitude=line.lat.mean(),
