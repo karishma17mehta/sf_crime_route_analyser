@@ -1,56 +1,76 @@
-from kafka import KafkaConsumer
-import json
-import joblib
-import os
-from datetime import datetime
+# consumer.py
+from confluent_kafka import Consumer
+import os, json, joblib
 from dotenv import load_dotenv
-import numpy as np
+from datetime import datetime
+import pandas as pd
 
-# --- Load environment and model ---
-load_dotenv("py.env")
+# Load env variables
+load_dotenv()
+
+# Load model + encoder
 clf = joblib.load("models/risk_model.joblib")
 ohe = joblib.load("models/encoder.joblib")
 
-# File path to save predictions for app.py to read
+# Config for Confluent Kafka
+conf = {
+    'bootstrap.servers': os.getenv("BOOTSTRAP_SERVERS"),
+    'security.protocol': 'SASL_SSL',
+    'sasl.mechanisms': 'PLAIN',
+    'sasl.username': os.getenv("API_KEY"),
+    'sasl.password': os.getenv("API_SECRET"),
+    'group.id': 'crime-risk-worker',
+    'auto.offset.reset': 'earliest'
+}
+
+consumer = Consumer(conf)
+consumer.subscribe(['crime-events'])
+
 PREDICTION_FILE = "latest_prediction.json"
 
 def save_prediction(prediction):
     with open(PREDICTION_FILE, "w") as f:
         json.dump(prediction, f)
 
-def get_latest_predictions():
-    if os.path.exists(PREDICTION_FILE):
-        with open(PREDICTION_FILE, "r") as f:
-            return json.load(f)
-    return {}
+print("✅ Connected to Confluent Cloud. Waiting for messages...")
 
-# --- Start Kafka consumer ---
-consumer = KafkaConsumer(
-    'crime-events',
-    bootstrap_servers='localhost:9092',
-    auto_offset_reset='latest',
-    value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-)
+segments = []
 
-print("Listening for crime-events...")
-
-segment_predictions = []
-
-for msg in consumer:
-    event = msg.value
-    print("Received event:", event)
+while True:
+    msg = consumer.poll(1.0)
+    if msg is None:
+        continue
+    if msg.error():
+        print("❌ Kafka error:", msg.error())
+        continue
 
     try:
-        # Step 1: Extract necessary fields
-        hour = datetime.fromisoformat(event['incident_datetime']).hour
-        day_of_week = datetime.fromisoformat(event['incident_datetime']).strftime("%A")
+        event = json.loads(msg.value().decode('utf-8'))
+        print("📥 Received:", event)
 
-        # Step 2: Format into model input
-        input_data = {
-            'hour': hour,
-            'minute': 0,  # assuming
-            'day_of_week_encoded': day_of_week
+        incident_time = event.get("incident_datetime")
+        hour = datetime.fromisoformat(incident_time).hour
+        day = datetime.fromisoformat(incident_time).strftime("%A")
+
+        row = {
+            "hour": hour,
+            "minute": 0,
+            "day_of_week_encoded": day
         }
 
-        df_input = ohe.transform(pd.DataFrame([input_data]))
-        risk_score = clf.p_
+        X = ohe.transform(pd.DataFrame([row]))
+        risk = float(clf.predict_proba(X)[0][1])
+
+        segments.append({
+            "from": event.get("address", "unknown"),
+            "to": "unknown",
+            "risk_score": round(risk, 2)
+        })
+
+        if len(segments) > 10:
+            segments = segments[-10:]
+
+        save_prediction({"segments": segments})
+
+    except Exception as e:
+        print(f"❌ Error handling message: {e}")
