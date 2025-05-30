@@ -61,7 +61,7 @@ def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, o
 
     print("⚠️ High risk detected. Attempting reroute...")
     lat_offset = buffer
-    reroute_coords = [(lat + lat_offset, lon) for lat, lon in coords]
+    reroute_coords = [(lat + lat_offset, lon) for lon, lat in coords]
 
     rerouted_risk, rerouted_scores = assess_route(reroute_coords, hour, minute, day_str, clf, ohe, day_labels)
     return {
