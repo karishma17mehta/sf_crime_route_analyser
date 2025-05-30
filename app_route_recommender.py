@@ -97,7 +97,7 @@ if st.button("🧭 Find Safest Route"):
         )
 
         # ➕ Add live crime incident markers
-        crime_data = fetch_live_crimes(minutes_ago=2880)
+        crime_data = fetch_live_crimes(minutes_ago=1440)
         add_crime_markers(folium_map, crime_data)
 
         st.components.v1.html(folium_map.get_root().render(), height=520)
