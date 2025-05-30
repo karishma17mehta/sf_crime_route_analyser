@@ -1,0 +1,5 @@
+# Ignore all environment and secret files
+*.env
+*.env.*
+py.env
+py11.env
