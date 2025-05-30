@@ -55,7 +55,7 @@ if st.button("🧭 Find Safest Route"):
                 clf=clf,
                 ohe=ohe,
                 day_labels=day_labels,
-                ors_client=ors_client
+                ors=ors_client
             )
         except Exception as e:
             st.error(f"❌ Rerouting failed: {e}")
