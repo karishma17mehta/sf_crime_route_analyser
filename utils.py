@@ -1,5 +1,4 @@
 import openrouteservice
-from openrouteservice import convert
 import folium
 import numpy as np
 
@@ -27,7 +26,10 @@ def get_route_coords(start, end, client):
             profile='foot-walking',
             format='geojson'
         )
-        coords = convert.decode_polyline(route['routes'][0]['geometry'])['coordinates']
+        coords = route['features'][0]['geometry']['coordinates']
+        if not coords:
+            print("❌ No route geometry found.")
+            return None
         print(f"✅ Route found with {len(coords)} points")
         return coords
     except Exception as e:
@@ -37,19 +39,26 @@ def get_route_coords(start, end, client):
 def assess_route(coords, hour, minute, day_str, clf, ohe, day_labels):
     day_encoded = ohe.transform([[day_str]])
     route_features = []
-    for lat, lon in coords:
+    for lon, lat in coords:
         row = {
             "hour": hour,
             "minute": minute,
             "latitude": lat,
             "longitude": lon
         }
-        row_encoded = np.concatenate([np.array([[row['hour'], row['minute'], row['latitude'], row['longitude']]]), day_encoded], axis=1)
+        row_encoded = np.concatenate(
+            [np.array([[row['hour'], row['minute'], row['latitude'], row['longitude']]]), day_encoded],
+            axis=1
+        )
         route_features.append(row_encoded[0])
     preds = clf.predict_proba(route_features)[:, 1]
     return preds.mean(), preds.tolist()
 
 def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, ohe, day_labels, client, buffer=0.01):
+    if coords is None:
+        print("❌ No original route available for risk assessment.")
+        return None
+
     original_risk, original_scores = assess_route(coords, hour, minute, day_str, clf, ohe, day_labels)
     if original_risk <= 0.5:
         return {
@@ -60,8 +69,9 @@ def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, o
         }
 
     print("⚠️ High risk detected. Attempting reroute...")
+
     lat_offset = buffer
-    reroute_coords = [(lat + lat_offset, lon) for lon, lat in coords]
+    reroute_coords = [(lon, lat + lat_offset) for lon, lat in coords]
 
     rerouted_risk, rerouted_scores = assess_route(reroute_coords, hour, minute, day_str, clf, ohe, day_labels)
     return {
@@ -72,17 +82,17 @@ def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, o
         "buffer_used": buffer
     }
 
-def plot_route_on_map(coords, start, end, avg_risk, risk_scores, rerouted=False):
+def plot_route_on_map(coords, start, end, risk_score, risk_per_point, rerouted=False):
     m = folium.Map(location=[start[1], start[0]], zoom_start=13)
 
     folium.Marker([start[1], start[0]], tooltip="Start", icon=folium.Icon(color="green")).add_to(m)
     folium.Marker([end[1], end[0]], tooltip="End", icon=folium.Icon(color="red")).add_to(m)
 
     route_line = [(lat, lon) for lon, lat in coords]
-    color = "red" if avg_risk > 0.5 else "green"
+    color = "red" if risk_score > 0.5 else "green"
     folium.PolyLine(route_line, color=color, weight=5, tooltip="Route").add_to(m)
 
-    for (lon, lat), risk in zip(coords, risk_scores):
+    for (lon, lat), risk in zip(coords, risk_per_point):
         folium.CircleMarker(
             location=(lat, lon),
             radius=3,
