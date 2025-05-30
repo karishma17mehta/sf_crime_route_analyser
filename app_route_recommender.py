@@ -93,7 +93,7 @@ if st.button("🧭 Find Safest Route"):
             risk_per_point=result["risk_per_point"],
             rerouted=result["was_rerouted"]
         )
-        crime_data = fetch_live_crimes(minutes_ago=1440)
+        crime_data = fetch_live_crimes(minutes_ago=2880)
         add_crime_markers(folium_map, crime_data)
 
         st.components.v1.html(folium_map.get_root().render(), height=520)
