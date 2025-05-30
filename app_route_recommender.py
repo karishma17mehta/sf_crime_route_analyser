@@ -40,6 +40,7 @@ if st.button("🧭 Find Safest Route"):
         
         try:
             coords = get_route_coords(start, end, ors_client)
+            st.write("🧭 Coordinates from ORS geocoding:", coords)
             st.write("📍 Route coords preview:", coords[:3] if coords else "None")
 
             if coords is None:
