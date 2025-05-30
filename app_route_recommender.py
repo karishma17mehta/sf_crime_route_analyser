@@ -51,7 +51,7 @@ if st.button("🧭 Find Safest Route"):
                 end=end,
                 hour=hour,
                 minute=minute,
-                day=day_str,
+                day_str=day_str,
                 clf=clf,
                 ohe=ohe,
                 day_labels=day_labels,
