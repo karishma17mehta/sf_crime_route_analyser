@@ -2,11 +2,10 @@ import openrouteservice
 import folium
 import numpy as np
 import requests
-import folium
+from datetime import datetime, timedelta
 
 def fetch_live_crimes(minutes_ago=720):
     """Fetch recent crimes from SF Open Data within the last X minutes."""
-    from datetime import datetime, timedelta
     since_time = (datetime.now() - timedelta(minutes=minutes_ago)).isoformat()
     url = "https://data.sfgov.org/resource/wg3w-h783.json"
     params = {
@@ -35,7 +34,6 @@ def add_crime_markers(map_obj, crime_data):
             ).add_to(map_obj)
         except Exception:
             continue
-
 
 def create_ors_client(api_key):
     print("🔑 Creating ORS client...")
