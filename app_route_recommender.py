@@ -27,7 +27,7 @@ ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Streamlit UI
 st.title("🚦 Smart Crime-Aware Route Recommender")
-st.markdown("Enter your start and end points to find a walking route optimized for **lower crime risk**.")
+st.markdown("Find the **safest walking route** in San Francisco by assessing crime risks in real time.")
 
 start = st.text_input("📍 Start location", "3250 16th Street, San Francisco")
 end = st.text_input("🏁 End location", "123 Market Street, San Francisco")
@@ -41,14 +41,13 @@ with col3:
     day_str = st.selectbox("📅 Day of week", day_labels, index=day_labels.index(datetime.now().strftime("%A")))
 
 if st.button("🧭 Find Safest Route"):
-    with st.spinner("Calculating route and assessing safety..."):
-        st.markdown(f"🔎 **Searching route:** `{start}` → `{end}`")
+    with st.spinner("Scoring your route for crime risk..."):
 
         try:
             coords = get_route_coords(start, end, ors_client)
-            st.write("🧭 First few route points:", coords[:3] if coords else "None")
             if coords is None:
                 raise ValueError("Route coordinates could not be retrieved.")
+            st.write("🧭 First few route points:", coords[:3])
         except Exception as e:
             st.error(f"❌ Could not geocode or retrieve route: {e}")
             st.stop()
@@ -66,27 +65,26 @@ if st.button("🧭 Find Safest Route"):
                 day_labels,
                 ors_client
             )
-            if result is None or "coords" not in result:
+            if not result or "coords" not in result:
                 raise ValueError("No valid route returned.")
         except Exception as e:
             st.error(f"❌ Rerouting failed: {e}")
             st.stop()
 
-        # ✅ Display route risk results
+        # Display rerouting logic
         if result["was_rerouted"]:
-            st.warning("⚠️ High-risk segments were detected on the original route. Rerouting was applied to avoid crime hotspots.")
-
+            st.warning("⚠️ High-risk areas detected. Route was adjusted to improve safety.")
             st.markdown(f"""
-            ### 🔍 Why rerouted?
+            ### 🔍 Reroute Details:
             - Original route risk: **{round(result['original_risk'], 2)}**
-            - Rerouted path risk: **{round(result['avg_risk'], 2)}**
-            - 🔁 **Risk reduced by:** `{round(result['original_risk'] - result['avg_risk'], 2)}`
-            - Buffer offset used: `{result.get('buffer_used', 0)}` degrees
+            - New route risk: **{round(result['avg_risk'], 2)}**
+            - 🔁 Risk reduction: **{round(result['original_risk'] - result['avg_risk'], 2)}**
+            - Buffer applied: `{result['buffer_used']}` degrees
             """)
         else:
-            st.success(f"✅ Original route is safe — risk score: **{round(result['avg_risk'], 2)}**")
+            st.success(f"✅ Safe route! Risk score: **{round(result['avg_risk'], 2)}**")
 
-        # 🗺️ Plot route
+        # Plot route and live crimes
         folium_map = plot_route_on_map(
             result["coords"],
             start,
@@ -95,20 +93,18 @@ if st.button("🧭 Find Safest Route"):
             risk_per_point=result["risk_per_point"],
             rerouted=result["was_rerouted"]
         )
-
-        # ➕ Add live crime incident markers
         crime_data = fetch_live_crimes(minutes_ago=1440)
         add_crime_markers(folium_map, crime_data)
 
         st.components.v1.html(folium_map.get_root().render(), height=520)
 
-        with st.expander("📘 How is crime risk calculated?"):
+        with st.expander("📘 How does this work?"):
             st.markdown("""
-            Risk scores are based on:
-            - 📍 Location (latitude, longitude)
-            - 🕒 Hour & minute of travel
-            - 📅 Day of the week
-
-            The model is trained on historical SF crime data.
-            If risk > 0.5, the route is rerouted with a lateral buffer to reduce exposure to hotspots.
+            - Risk is predicted using a machine learning model trained on SF crime data.
+            - Each route segment is scored by:
+                - 🕐 Hour & minute
+                - 📅 Day of the week
+                - 📍 Location (lat/lon)
+            - If route risk > 0.5, a reroute is triggered using a small lateral buffer.
+            - Live crime reports are also shown for added transparency.
             """)
