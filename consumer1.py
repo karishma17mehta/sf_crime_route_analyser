@@ -44,7 +44,7 @@ conf = {
     'sasl.mechanisms': 'PLAIN',
     'sasl.username': os.getenv("API_KEY"),
     'sasl.password': os.getenv("API_SECRET"),
-    'group.id': 'crime-risk-worker',
+    'group.id': 'crime-risk-worker-v2',
     'auto.offset.reset': 'earliest'
 }
 
@@ -63,6 +63,7 @@ segments = []
 
 try:
     while True:
+        print("⏳ Polling Kafka...")
         msg = consumer.poll(1.0)
         if msg is None:
             continue
