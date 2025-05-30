@@ -1,10 +1,10 @@
-from confluent_kafka import Consumer
+from confluent_kafka import Consumer, Producer
 import os, json, joblib, requests
 from dotenv import load_dotenv
 from datetime import datetime
 import pandas as pd
 
-# Load env variables
+# Load environment variables
 load_dotenv()
 
 # === Download model and encoder from GitHub ===
@@ -23,10 +23,8 @@ def download_from_github(raw_url, dest_path):
 MODEL_URL = "https://raw.githubusercontent.com/karishma17mehta/sf_crime_route_analyser/main/models/risk_model.joblib"
 ENCODER_URL = "https://raw.githubusercontent.com/karishma17mehta/sf_crime_route_analyser/main/models/encoder.joblib"
 
-# Ensure models directory exists
 os.makedirs("models", exist_ok=True)
 
-# Download model files if not already present
 if not os.path.exists("models/risk_model.joblib"):
     download_from_github(MODEL_URL, "models/risk_model.joblib")
 if not os.path.exists("models/encoder.joblib"):
@@ -36,37 +34,31 @@ if not os.path.exists("models/encoder.joblib"):
 clf = joblib.load("models/risk_model.joblib")
 ohe = joblib.load("models/encoder.joblib")
 
-# === Kafka Consumer Setup ===
-conf = {
+# Common Kafka config
+common_conf = {
     'bootstrap.servers': os.getenv("BOOTSTRAP_SERVERS"),
     'security.protocol': 'SASL_SSL',
     'sasl.mechanisms': 'PLAIN',
     'sasl.username': os.getenv("API_KEY"),
-    'sasl.password': os.getenv("API_SECRET"),
-    'group.id': 'crime-risk-worker-v2',
-    'auto.offset.reset': 'earliest'
+    'sasl.password': os.getenv("API_SECRET")
 }
 
-consumer = Consumer(conf)
+# Consumer for crime-events
+consumer_conf = common_conf.copy()
+consumer_conf.update({
+    'group.id': 'crime-risk-worker-v3',
+    'auto.offset.reset': 'earliest'
+})
+consumer = Consumer(consumer_conf)
 consumer.subscribe(['crime-events'])
 
-import os
+# Producer for predictions
+producer = Producer(common_conf)
 
-PREDICTION_FILE = os.path.join(os.getcwd(), "latest_prediction.json")
-
-def save_prediction(prediction):
-    with open(PREDICTION_FILE, "w") as f:
-        json.dump(prediction, f)
-    print(f"✅ Prediction saved to {PREDICTION_FILE}")
-
-
-print("✅ Connected to Confluent Cloud. Waiting for messages...")
-
-segments = []
+print("✅ Connected to Confluent Cloud. Waiting for crime-events...")
 
 try:
     while True:
-        print("⏳ Polling Kafka...")
         msg = consumer.poll(1.0)
         if msg is None:
             continue
@@ -81,12 +73,9 @@ try:
             incident_time = event.get("incident_datetime")
             hour = datetime.fromisoformat(incident_time).hour
             day = datetime.fromisoformat(incident_time).strftime("%A")
+            latitude = float(event.get("latitude", 37.7749))
+            longitude = float(event.get("longitude", -122.4194))
 
-            # Optional: fallback lat/lng if not provided
-            latitude = event.get("latitude", 37.7749)
-            longitude = event.get("longitude", -122.4194)
-
-            # Construct full input row
             row = {
                 "incident_hour": hour,
                 "incident_minute": 0,
@@ -96,30 +85,25 @@ try:
             }
 
             df_input = pd.DataFrame([row])
-
-            # Encode categorical variable
             day_encoded = ohe.transform(df_input[['day_of_week_encoded']])
             day_encoded_df = pd.DataFrame(day_encoded, columns=ohe.get_feature_names_out(['day_of_week_encoded']))
-
-            # Final input to model
             X_input = pd.concat([
                 df_input.drop(columns=['day_of_week_encoded']).reset_index(drop=True),
                 day_encoded_df.reset_index(drop=True)
             ], axis=1)
 
-            # Predict risk
             risk = float(clf.predict_proba(X_input)[0][1])
-
-            segments.append({
+            prediction = {
                 "from": event.get("address", "unknown"),
                 "to": "unknown",
-                "risk_score": round(risk, 2)
-            })
+                "risk_score": round(risk, 2),
+                "timestamp": datetime.utcnow().isoformat()
+            }
 
-            if len(segments) > 10:
-                segments = segments[-10:]
-
-            save_prediction({"segments": segments})
+            # Send prediction to new topic
+            producer.produce("predicted-risk", value=json.dumps(prediction))
+            producer.flush()
+            print("📤 Prediction sent to topic: predicted-risk")
 
         except Exception as e:
             print(f"❌ Error processing message: {e}")
@@ -130,4 +114,3 @@ except KeyboardInterrupt:
 finally:
     print("🧹 Closing Kafka consumer")
     consumer.close()
-
