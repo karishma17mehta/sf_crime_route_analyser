@@ -1,92 +1,78 @@
 import streamlit as st
-import pandas as pd
-import openrouteservice
 import joblib
 from datetime import datetime
-import os
 from dotenv import load_dotenv
-import pydeck as pdk
+import os
+import openrouteservice
+from utils import (
+    get_route_coords,
+    iterative_reroute_min_risk,
+    plot_route_on_map
+)
 
 # Load environment variables
-load_dotenv("py11.env")  # For local testing
+load_dotenv("py11.env")
 ORS_API_KEY = os.getenv("ORS_API_KEY") or st.secrets["ORS_API_KEY"]
 
-# ORS client
-ors = openrouteservice.Client(key=ORS_API_KEY)
-
-# Load ML model and encoder
+# Load model + encoder
 clf = joblib.load("models/risk_model.joblib")
 ohe = joblib.load("models/encoder.joblib")
+day_labels = list(ohe.categories_[0])
+
+# Initialize ORS client
+ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Streamlit UI
-st.title("🛣️ Safest Route Recommender")
-start = st.text_input("Start location", "123 Market Street, San Francisco")
-end = st.text_input("End location", "3250 16th Street, San Francisco")
+st.title("🚦 Smart Crime-Aware Route Recommender")
+start = st.text_input("📍 Start location", "123 Market Street, San Francisco")
+end = st.text_input("🏁 End location", "3250 16th Street, San Francisco")
 
-if st.button("Get Safest Route"):
-    with st.spinner("🧠 Calculating safest path..."):
+col1, col2 = st.columns(2)
+with col1:
+    hour = st.slider("Hour", 0, 23, datetime.now().hour)
+with col2:
+    minute = st.slider("Minute", 0, 59, datetime.now().minute)
+
+if st.button("🧭 Find Safest Route"):
+    with st.spinner("Calculating route and assessing safety..."):
         try:
-            # Get coordinates
-            start_coords = ors.pelias_search(start)["features"][0]["geometry"]["coordinates"]
-            end_coords = ors.pelias_search(end)["features"][0]["geometry"]["coordinates"]
-            coords = [start_coords, end_coords]
-            st.info(f"📍 From: {start_coords}, To: {end_coords}")
+            # Convert start/end to route coordinates
+            coords = get_route_coords(start, end, ors_client)
         except Exception as e:
-            st.error(f"❌ Failed to locate address: {e}")
+            st.error(f"❌ Could not geocode route: {e}")
             st.stop()
+
+        day_str = datetime.now().strftime("%A")
 
         try:
-            route = ors.directions(coords, profile='foot-walking', format='geojson')['features'][0]
-        except openrouteservice.exceptions.ApiError as e:
-            st.error(f"❌ ORS API error: {e}")
+            result = iterative_reroute_min_risk(
+                coords=coords,
+                start=start,
+                end=end,
+                hour=hour,
+                minute=minute,
+                day=day_str,
+                clf=clf,
+                ohe=ohe,
+                day_labels=day_labels,
+                ors_client=ors_client
+            )
+        except Exception as e:
+            st.error(f"❌ Rerouting failed: {e}")
             st.stop()
 
-        points = route['geometry']['coordinates']
-        if not points:
-            st.error("❌ No route returned. Try a different location.")
-            st.stop()
+        # Plot the final route
+        st.success(
+            f"✅ Route risk score: {round(result['avg_risk'], 2)}"
+            + (" — rerouted to avoid crime hotspots" if result["was_rerouted"] else " — original route is safe")
+        )
 
-        # Score risk at sampled points
-        risks = []
-        for lon, lat in points[::10]:  # Sample every 10th point
-            hour = datetime.now().hour
-            day = datetime.now().strftime("%A")
-            row = {
-                "incident_hour": hour,
-                "incident_minute": 0,
-                "latitude": lat,
-                "longitude": lon,
-                "day_of_week_encoded": day
-            }
-            df = pd.DataFrame([row])
-            encoded = ohe.transform(df[['day_of_week_encoded']])
-            encoded_df = pd.DataFrame(encoded, columns=ohe.get_feature_names_out(['day_of_week_encoded']))
-            X = pd.concat([df.drop(columns=['day_of_week_encoded']), encoded_df], axis=1)
-            risk = clf.predict_proba(X)[0][1]
-            risks.append(risk)
-
-        total_risk = round(sum(risks), 2)
-        st.success(f"✅ Total risk score: {total_risk}")
-
-        # Prepare map data
-        line = pd.DataFrame(points, columns=['lon', 'lat']).astype(float)
-
-        st.pydeck_chart(pdk.Deck(
-            initial_view_state=pdk.ViewState(
-                latitude=line.lat.mean(),
-                longitude=line.lon.mean(),
-                zoom=13,
-                pitch=0,
-            ),
-            layers=[
-                pdk.Layer(
-                    "LineLayer",
-                    data=line,
-                    get_source_position=["lon", "lat"],
-                    get_target_position=["lon", "lat"],
-                    get_width=5,
-                    get_color=[0, 255, 0],
-                    pickable=True
-                )
-            ],
-        ))
+        folium_map = plot_route_on_map(
+            result["coords"],
+            start,
+            end,
+            risk_score=result["avg_risk"],
+            risk_per_point=result["risk_per_point"],
+            rerouted=result["was_rerouted"]
+        )
+        st.components.v1.html(folium_map.get_root().render(), height=500)
