@@ -55,41 +55,49 @@ print("✅ Connected to Confluent Cloud. Waiting for messages...")
 
 segments = []
 
-while True:
-    msg = consumer.poll(1.0)
-    if msg is None:
-        continue
-    if msg.error():
-        print("❌ Kafka error:", msg.error())
-        continue
+try:
+    while True:
+        msg = consumer.poll(1.0)
+        if msg is None:
+            continue
+        if msg.error():
+            print("❌ Kafka error:", msg.error())
+            continue
 
-    try:
-        event = json.loads(msg.value().decode('utf-8'))
-        print("📥 Received:", event)
+        try:
+            event = json.loads(msg.value().decode('utf-8'))
+            print("📥 Received:", event)
 
-        incident_time = event.get("incident_datetime")
-        hour = datetime.fromisoformat(incident_time).hour
-        day = datetime.fromisoformat(incident_time).strftime("%A")
+            incident_time = event.get("incident_datetime")
+            hour = datetime.fromisoformat(incident_time).hour
+            day = datetime.fromisoformat(incident_time).strftime("%A")
 
-        row = {
-            "hour": hour,
-            "minute": 0,
-            "day_of_week_encoded": day
-        }
+            row = {
+                "hour": hour,
+                "minute": 0,
+                "day_of_week_encoded": day
+            }
 
-        X = ohe.transform(pd.DataFrame([row]))
-        risk = float(clf.predict_proba(X)[0][1])
+            X = ohe.transform(pd.DataFrame([row]))
+            risk = float(clf.predict_proba(X)[0][1])
 
-        segments.append({
-            "from": event.get("address", "unknown"),
-            "to": "unknown",
-            "risk_score": round(risk, 2)
-        })
+            segments.append({
+                "from": event.get("address", "unknown"),
+                "to": "unknown",
+                "risk_score": round(risk, 2)
+            })
 
-        if len(segments) > 10:
-            segments = segments[-10:]
+            if len(segments) > 10:
+                segments = segments[-10:]
 
-        save_prediction({"segments": segments})
+            save_prediction({"segments": segments})
 
-    except Exception as e:
-        print(f"❌ Error handling message: {e}")
+        except Exception as e:
+            print(f"❌ Error processing message: {e}")
+
+except KeyboardInterrupt:
+    print("🛑 Gracefully shutting down...")
+
+finally:
+    print("🧹 Closing Kafka consumer")
+    consumer.close()
