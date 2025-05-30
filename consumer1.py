@@ -50,11 +50,15 @@ conf = {
 consumer = Consumer(conf)
 consumer.subscribe(['crime-events'])
 
-PREDICTION_FILE = "latest_prediction.json"
+import os
+
+PREDICTION_FILE = os.path.join(os.getcwd(), "latest_prediction.json")
 
 def save_prediction(prediction):
     with open(PREDICTION_FILE, "w") as f:
         json.dump(prediction, f)
+    print(f"✅ Prediction saved to {PREDICTION_FILE}")
+
 
 print("✅ Connected to Confluent Cloud. Waiting for messages...")
 
