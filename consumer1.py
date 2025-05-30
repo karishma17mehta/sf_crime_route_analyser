@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 
 # Load environment variables
-load_dotenv()
+load_dotenv("py11.env")
 
 # === Download model and encoder from GitHub ===
 def download_from_github(raw_url, dest_path):
@@ -36,13 +36,12 @@ ohe = joblib.load("models/encoder.joblib")
 
 # Common Kafka config
 common_conf = {
-    'bootstrap.servers': os.getenv("BOOTSTRAP_SERVERS"),
+    'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP"),
     'security.protocol': 'SASL_SSL',
     'sasl.mechanisms': 'PLAIN',
-    'sasl.username': os.getenv("API_KEY"),
-    'sasl.password': os.getenv("API_SECRET")
+    'sasl.username': os.getenv("KAFKA_API_KEY"),
+    'sasl.password': os.getenv("KAFKA_API_SECRET")
 }
-
 # Consumer for crime-events
 consumer_conf = common_conf.copy()
 consumer_conf.update({
