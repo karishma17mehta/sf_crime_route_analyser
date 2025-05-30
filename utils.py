@@ -20,19 +20,23 @@ def geocode_address(address, api_key):
 
 def get_route_coords(start, end, client):
     try:
-        print(f"🛣️ Requesting route from {start} to {end}")
+        print(f"🔎 Geocoding: {start} → {end}")
+        start_coords = client.pelias_search(start)["features"][0]["geometry"]["coordinates"]
+        end_coords = client.pelias_search(end)["features"][0]["geometry"]["coordinates"]
+        print(f"📍 Start: {start_coords}, End: {end_coords}")
+
         route = client.directions(
-            coordinates=[start, end],
+            coordinates=[start_coords, end_coords],
             profile='foot-walking',
             format='geojson'
         )
-        print("✅ ORS directions response received.")
         coords = route['features'][0]['geometry']['coordinates']
-        print(f"✅ Route geometry found with {len(coords)} points")
+        print(f"✅ Route found with {len(coords)} points")
         return coords
     except Exception as e:
         print(f"❌ Routing error: {e}")
         return None
+
 
 def assess_route(coords, hour, minute, day_str, clf, ohe, day_labels):
     day_encoded = ohe.transform([[day_str]])
