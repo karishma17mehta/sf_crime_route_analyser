@@ -1,6 +1,41 @@
 import openrouteservice
 import folium
 import numpy as np
+import requests
+import folium
+
+def fetch_live_crimes(minutes_ago=720):
+    """Fetch recent crimes from SF Open Data within the last X minutes."""
+    from datetime import datetime, timedelta
+    since_time = (datetime.now() - timedelta(minutes=minutes_ago)).isoformat()
+    url = "https://data.sfgov.org/resource/wg3w-h783.json"
+    params = {
+        "$where": f"incident_datetime > '{since_time}'",
+        "$limit": 500,
+        "$order": "incident_datetime DESC"
+    }
+    response = requests.get(url, params=params)
+    return response.json() if response.status_code == 200 else []
+
+def add_crime_markers(map_obj, crime_data):
+    """Add markers for live crime events to a Folium map."""
+    for c in crime_data:
+        try:
+            lat = float(c["latitude"])
+            lon = float(c["longitude"])
+            tooltip = f"{c.get('incident_category', 'Unknown')} ({c.get('incident_datetime', '')})"
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=4,
+                color="red",
+                fill=True,
+                fill_color="red",
+                fill_opacity=0.7,
+                tooltip=tooltip
+            ).add_to(map_obj)
+        except Exception:
+            continue
+
 
 def create_ors_client(api_key):
     print("🔑 Creating ORS client...")
