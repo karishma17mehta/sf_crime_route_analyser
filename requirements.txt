@@ -13,3 +13,4 @@ confluent-kafka
 joblib
 requests
 gdown
+pydeck
