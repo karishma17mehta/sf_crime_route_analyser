@@ -31,8 +31,10 @@ end = st.text_input("End location", "Golden Gate Park, San Francisco")
 
 if st.button("Get Safest Route"):
     with st.spinner("🧠 Scoring route options..."):
-        coords = ors.pelias_search(start)["features"][0]["geometry"]["coordinates"], \
-                 ors.pelias_search(end)["features"][0]["geometry"]["coordinates"]
+        start_coords = ors.pelias_search(start)["features"][0]["geometry"]["coordinates"]
+        end_coords = ors.pelias_search(end)["features"][0]["geometry"]["coordinates"]
+        coords = [start_coords, end_coords]
+
 
         routes = ors.directions(coords, profile='driving-car', format='geojson', optimize_waypoints=True)
         all_routes = routes['features']
