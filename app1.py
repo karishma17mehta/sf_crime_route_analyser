@@ -1,8 +1,8 @@
 import streamlit as st
-import os, joblib, json
+import os, joblib, json, threading
 from datetime import datetime
 from dotenv import load_dotenv
-
+from confluent_kafka import Consumer
 import pandas as pd
 import numpy as np
 import openrouteservice
@@ -20,27 +20,58 @@ ohe = joblib.load("models/encoder.joblib")
 day_labels = ohe.get_feature_names_out(['day_of_week_encoded'])
 ors_client = create_ors_client(api_key)
 
+# --- Real-time Kafka listener for sidebar updates ---
+live_predictions = []
+
+def kafka_listener():
+    conf = {
+        'bootstrap.servers': os.getenv("BOOTSTRAP_SERVERS"),
+        'security.protocol': 'SASL_SSL',
+        'sasl.mechanisms': 'PLAIN',
+        'sasl.username': os.getenv("API_KEY"),
+        'sasl.password': os.getenv("API_SECRET"),
+        'group.id': 'streamlit-risk-display',
+        'auto.offset.reset': 'latest'
+    }
+    consumer = Consumer(conf)
+    consumer.subscribe(['predicted-risk'])
+
+    while True:
+        msg = consumer.poll(1.0)
+        if msg is None:
+            continue
+        if msg.error():
+            print("Kafka error:", msg.error())
+            continue
+
+        try:
+            event = json.loads(msg.value().decode('utf-8'))
+            live_predictions.append(event)
+            if len(live_predictions) > 20:
+                live_predictions.pop(0)
+        except Exception as e:
+            print("Error parsing prediction:", e)
+
+# --- Start background thread once ---
+if "kafka_started" not in st.session_state:
+    threading.Thread(target=kafka_listener, daemon=True).start()
+    st.session_state["kafka_started"] = True
+
+# --- Streamlit UI ---
 st.set_page_config(layout="wide")
 st.title("🛡️ SafeRoute: Real-Time Crime-Aware Navigation")
 
-# --- Sidebar: Segment-Level Predictions ---
+# --- Sidebar: Live Segment Predictions ---
 st.sidebar.header("🚨 Segment-Level Predictions")
-if os.path.exists("latest_prediction.json"):
-    with open("latest_prediction.json", "r") as f:
-        data = json.load(f)
-    segments = data.get("segments", [])
-    st.sidebar.write(f"Number of segments: {len(segments)}")
-    if segments:
-        for seg in reversed(segments[-5:]):
-            st.sidebar.markdown(f"""
-            **{seg.get("from", "Unknown")}**  
-            → `{seg.get("to", "Unknown")}`  
-            🔥 Risk Score: `{seg.get("risk_score", "N/A")}`
-            """)
-    else:
-        st.sidebar.info("No predictions yet.")
+if live_predictions:
+    for seg in reversed(live_predictions[-5:]):
+        st.sidebar.markdown(f"""
+        **{seg.get("from", "Unknown")}**  
+        → `{seg.get("to", "Unknown")}`  
+        🔥 Risk Score: `{seg.get("risk_score", "N/A")}`
+        """)
 else:
-    st.sidebar.warning("No prediction file found yet.")
+    st.sidebar.info("No predictions received yet.")
 
 # --- UI Input ---
 start_address = st.text_input("📍 Enter your starting address", "")
