@@ -1,11 +1,10 @@
-import openrouteservice
-import folium
 import numpy as np
 import requests
+import folium
 from datetime import datetime, timedelta
+from geopy.distance import geodesic
 
-def fetch_live_crimes(minutes_ago=2880):
-    """Fetch recent crimes from SF Open Data within the last X minutes."""
+def fetch_live_crimes(minutes_ago=1440):
     since_time = (datetime.now() - timedelta(minutes=minutes_ago)).isoformat()
     url = "https://data.sfgov.org/resource/wg3w-h783.json"
     params = {
@@ -17,7 +16,6 @@ def fetch_live_crimes(minutes_ago=2880):
     return response.json() if response.status_code == 200 else []
 
 def add_crime_markers(map_obj, crime_data):
-    """Add markers for live crime events to a Folium map."""
     for c in crime_data:
         try:
             lat = float(c["latitude"])
@@ -32,43 +30,34 @@ def add_crime_markers(map_obj, crime_data):
                 fill_opacity=0.7,
                 tooltip=tooltip
             ).add_to(map_obj)
-        except Exception:
+        except:
             continue
-
-def create_ors_client(api_key):
-    print("🔑 Creating ORS client...")
-    return openrouteservice.Client(key=api_key)
-
-def geocode_address(address, api_key):
-    client = create_ors_client(api_key)
-    try:
-        print(f"📍 Geocoding address: {address}")
-        geocode = client.pelias_search(text=address)
-        coords = geocode['features'][0]['geometry']['coordinates']
-        print(f"✅ Coordinates for '{address}': {coords[1]}, {coords[0]}")
-        return coords[0], coords[1]  # (lon, lat)
-    except Exception as e:
-        print(f"❌ Geocoding error for '{address}':", e)
-        return None
 
 def get_route_coords(start, end, client):
     try:
-        print(f"🛣️ Requesting route from '{start}' to '{end}'")
         start_coords = client.pelias_search(start)["features"][0]["geometry"]["coordinates"]
         end_coords = client.pelias_search(end)["features"][0]["geometry"]["coordinates"]
-        print(f"📍 Start: {start_coords}, End: {end_coords}")
-
         route = client.directions(
             coordinates=[start_coords, end_coords],
             profile='foot-walking',
             format='geojson'
         )
-        coords = route['features'][0]['geometry']['coordinates']
-        print(f"✅ Route found with {len(coords)} points")
-        return coords
+        return route['features'][0]['geometry']['coordinates']
     except Exception as e:
         print(f"❌ Routing error: {e}")
         return None
+
+def is_near_crime(point, crimes, radius_meters=50):
+    lat1, lon1 = point
+    for c in crimes:
+        try:
+            lat2 = float(c["latitude"])
+            lon2 = float(c["longitude"])
+            if geodesic((lat1, lon1), (lat2, lon2)).meters <= radius_meters:
+                return True
+        except:
+            continue
+    return False
 
 def assess_route(coords, hour, minute, day_str, clf, ohe, day_labels):
     day_encoded = ohe.transform([[day_str]])
@@ -84,12 +73,14 @@ def assess_route(coords, hour, minute, day_str, clf, ohe, day_labels):
 
 def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, ohe, day_labels, client, buffer=0.01):
     if coords is None:
-        print("❌ No original route available for risk assessment.")
         return None
 
+    recent_crimes = fetch_live_crimes(minutes_ago=1440)
     original_risk, original_scores = assess_route(coords, hour, minute, day_str, clf, ohe, day_labels)
 
-    if original_risk <= 0.5:
+    near_crime = any(is_near_crime((lat, lon), recent_crimes) for lon, lat in coords)
+
+    if original_risk <= 0.5 and not near_crime:
         return {
             "coords": coords,
             "avg_risk": original_risk,
@@ -98,12 +89,7 @@ def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, o
             "original_risk": original_risk
         }
 
-    print("⚠️ High risk detected. Attempting reroute...")
-
-    # Simple reroute: shift latitudes northward
-    lat_offset = buffer
-    rerouted_coords = [(lon, lat + lat_offset) for lon, lat in coords]
-
+    rerouted_coords = [(lon, lat + buffer) for lon, lat in coords]
     rerouted_risk, rerouted_scores = assess_route(rerouted_coords, hour, minute, day_str, clf, ohe, day_labels)
 
     return {
@@ -117,19 +103,17 @@ def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, o
 
 def plot_route_on_map(coords, start, end, risk_score, risk_per_point, rerouted=False):
     if coords is None or len(coords) == 0:
-        print("❌ No coordinates to plot.")
-        return folium.Map(location=[37.7749, -122.4194], zoom_start=12)  # default to SF
+        return folium.Map(location=[37.7749, -122.4194], zoom_start=12)
 
-    # Map centered on first route point
     lon, lat = coords[0]
     m = folium.Map(location=[lat, lon], zoom_start=13)
 
     folium.Marker([start[1], start[0]], tooltip="Start", icon=folium.Icon(color="green")).add_to(m)
     folium.Marker([end[1], end[0]], tooltip="End", icon=folium.Icon(color="red")).add_to(m)
 
-    route_line = [(lat, lon) for lon, lat in coords]  # folium uses lat, lon
-    route_color = "red" if risk_score > 0.5 else "green"
-    folium.PolyLine(route_line, color=route_color, weight=5, tooltip="Route").add_to(m)
+    route_line = [(lat, lon) for lon, lat in coords]
+    color = "red" if risk_score > 0.5 else "green"
+    folium.PolyLine(route_line, color=color, weight=5, tooltip="Route").add_to(m)
 
     for (lon, lat), risk in zip(coords, risk_per_point):
         folium.CircleMarker(
