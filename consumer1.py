@@ -1,31 +1,18 @@
-# consumer.py
+# consumer1.py
 from confluent_kafka import Consumer
-import os, json, joblib, requests
+import os, json, joblib
 from dotenv import load_dotenv
 from datetime import datetime
 import pandas as pd
+import gdown
 
 # Load env variables
 load_dotenv()
 
-# === Download model and encoder from Google Drive if not present ===
-def download_from_drive(file_id, dest_path):
-    print(f"📥 Downloading {dest_path} from Google Drive...")
-    URL = "https://drive.google.com/uc?export=download"
-    session = requests.Session()
-    response = session.get(URL, params={'id': file_id}, stream=True)
-
-    # Handle confirmation token
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
-            break
-
-    with open(dest_path, 'wb') as f:
-        for chunk in response.iter_content(32768):
-            if chunk:
-                f.write(chunk)
-    print(f"✅ Downloaded {dest_path}")
+# === Download model and encoder from Google Drive using gdown ===
+def download_with_gdown(file_id, dest_path):
+    url = f"https://drive.google.com/uc?id={file_id}"
+    gdown.download(url, dest_path, quiet=False)
 
 # Google Drive File IDs
 MODEL_ID = "1f45zx2ACMiMArMFnP9x8_Lb81SLNhWAz"
@@ -34,13 +21,13 @@ ENCODER_ID = "16qitgq4mlWc4I2JRgf7CHWttYmq6troA"
 # Ensure models directory exists
 os.makedirs("models", exist_ok=True)
 
-# Download files if not present
+# Download files if not already present
 if not os.path.exists("models/risk_model.joblib"):
-    download_from_drive(MODEL_ID, "models/risk_model.joblib")
+    download_with_gdown(MODEL_ID, "models/risk_model.joblib")
 if not os.path.exists("models/encoder.joblib"):
-    download_from_drive(ENCODER_ID, "models/encoder.joblib")
+    download_with_gdown(ENCODER_ID, "models/encoder.joblib")
 
-# Load model + encoder
+# Load model and encoder
 clf = joblib.load("models/risk_model.joblib")
 ohe = joblib.load("models/encoder.joblib")
 
