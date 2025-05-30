@@ -26,11 +26,9 @@ def get_route_coords(start, end, client):
             profile='foot-walking',
             format='geojson'
         )
+        print("✅ ORS directions response received.")
         coords = route['features'][0]['geometry']['coordinates']
-        if not coords:
-            print("❌ No route geometry found.")
-            return None
-        print(f"✅ Route found with {len(coords)} points")
+        print(f"✅ Route geometry found with {len(coords)} points")
         return coords
     except Exception as e:
         print(f"❌ Routing error: {e}")
