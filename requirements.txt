@@ -11,3 +11,4 @@ python-dotenv
 kafka-python
 confluent-kafka
 joblib
+requests
