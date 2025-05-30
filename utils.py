@@ -18,15 +18,19 @@ def geocode_address(address, api_key):
 
 def get_route_coords(start, end, client):
     try:
+        print(f"🧭 Getting route from {start} to {end}")
         route = client.directions(
             coordinates=[start, end],
             profile='foot-walking',
             format='geojson'
         )
-        return convert.decode_polyline(route['routes'][0]['geometry'])['coordinates']
+        coords = convert.decode_polyline(route['routes'][0]['geometry'])['coordinates']
+        print(f"✅ Route found with {len(coords)} points.")
+        return coords
     except Exception as e:
-        print("Routing error:", e)
+        print(f"❌ Routing error: {e}")
         return None
+
 
 def assess_route(coords, hour, minute, day_str, clf, ohe, day_labels):
     day_encoded = ohe.transform([[day_str]])
