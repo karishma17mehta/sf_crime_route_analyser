@@ -1,33 +1,39 @@
-# consumer1.py
 from confluent_kafka import Consumer
-import os, json, joblib
+import os, json, joblib, requests
 from dotenv import load_dotenv
 from datetime import datetime
 import pandas as pd
-import gdown
 
 # Load env variables
 load_dotenv()
 
-# === Download model and encoder from Google Drive using gdown ===
-def download_with_gdown(file_id, dest_path):
-    url = f"https://drive.google.com/uc?id={file_id}"
-    gdown.download(url, dest_path, quiet=False)
+# === Download model and encoder from GitHub ===
+def download_from_github(raw_url, dest_path):
+    print(f"📥 Downloading {dest_path} from GitHub...")
+    response = requests.get(raw_url, stream=True)
+    if response.status_code == 200:
+        with open(dest_path, 'wb') as f:
+            for chunk in response.iter_content(1024):
+                f.write(chunk)
+        print(f"✅ Downloaded {dest_path}")
+    else:
+        raise Exception(f"❌ Failed to download {raw_url}")
 
-# Google Drive File IDs
-MODEL_ID = "1f45zx2ACMiMArMFnP9x8_Lb81SLNhWAz"
-ENCODER_ID = "16qitgq4mlWc4I2JRgf7CHWttYmq6troA"
+# GitHub raw URLs
+MODEL_URL = "https://raw.githubusercontent.com/karishma17mehta/sf_crime_route_analyser/main/models/risk_model.joblib"
+ENCODER_URL = "https://raw.githubusercontent.com/karishma17mehta/sf_crime_route_analyser/main/models/encoder.joblib"
+
 
 # Ensure models directory exists
 os.makedirs("models", exist_ok=True)
 
-# Download files if not already present
+# Download files if not present
 if not os.path.exists("models/risk_model.joblib"):
-    download_with_gdown(MODEL_ID, "models/risk_model.joblib")
+    download_from_github(MODEL_URL, "models/risk_model.joblib")
 if not os.path.exists("models/encoder.joblib"):
-    download_with_gdown(ENCODER_ID, "models/encoder.joblib")
+    download_from_github(ENCODER_URL, "models/encoder.joblib")
 
-# Load model and encoder
+# Load model + encoder
 clf = joblib.load("models/risk_model.joblib")
 ohe = joblib.load("models/encoder.joblib")
 
