@@ -21,7 +21,7 @@ def get_route_coords(start, end, client):
         print(f"🧭 Getting route from {start} to {end}")
         route = client.directions(
             coordinates=[start, end],
-            profile='foot-walking',
+            profile='driving-car',
             format='geojson'
         )
         coords = convert.decode_polyline(route['routes'][0]['geometry'])['coordinates']
