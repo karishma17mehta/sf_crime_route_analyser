@@ -45,17 +45,18 @@ if st.button("🧭 Find Safest Route"):
         day_str = datetime.now().strftime("%A")
 
         try:
+            # ✅ FIXED: use positional arguments
             result = iterative_reroute_min_risk(
-                coords=coords,
-                start=start,
-                end=end,
-                hour=hour,
-                minute=minute,
-                day_str=day_str,
-                clf=clf,
-                ohe=ohe,
-                day_labels=day_labels,
-                ors_client=ors_client
+                coords,
+                start,
+                end,
+                hour,
+                minute,
+                day_str,
+                clf,
+                ohe,
+                day_labels,
+                ors_client  # no keyword here
             )
         except Exception as e:
             st.error(f"❌ Rerouting failed: {e}")
