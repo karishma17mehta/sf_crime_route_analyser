@@ -20,7 +20,7 @@ def geocode_address(address, api_key):
 
 def get_route_coords(start, end, client):
     try:
-        print(f"🔎 Geocoding: {start} → {end}")
+        print(f"🛣️ Requesting route from {start} to {end}")
         start_coords = client.pelias_search(start)["features"][0]["geometry"]["coordinates"]
         end_coords = client.pelias_search(end)["features"][0]["geometry"]["coordinates"]
         print(f"📍 Start: {start_coords}, End: {end_coords}")
@@ -36,7 +36,6 @@ def get_route_coords(start, end, client):
     except Exception as e:
         print(f"❌ Routing error: {e}")
         return None
-
 
 def assess_route(coords, hour, minute, day_str, clf, ohe, day_labels):
     day_encoded = ohe.transform([[day_str]])
@@ -90,6 +89,7 @@ def plot_route_on_map(coords, start, end, risk_score, risk_per_point, rerouted=F
     folium.Marker([start[1], start[0]], tooltip="Start", icon=folium.Icon(color="green")).add_to(m)
     folium.Marker([end[1], end[0]], tooltip="End", icon=folium.Icon(color="red")).add_to(m)
 
+    # Correct order: lat, lon for Folium
     route_line = [(lat, lon) for lon, lat in coords]
     color = "red" if risk_score > 0.5 else "green"
     folium.PolyLine(route_line, color=color, weight=5, tooltip="Route").add_to(m)
