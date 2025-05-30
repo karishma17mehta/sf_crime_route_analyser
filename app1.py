@@ -46,6 +46,7 @@ def kafka_listener():
 
         try:
             event = json.loads(msg.value().decode('utf-8'))
+            print("📬 Kafka prediction received:", event)  # 👈 Added line
             live_predictions.append(event)
             if len(live_predictions) > 20:
                 live_predictions.pop(0)
@@ -90,11 +91,14 @@ if st.button("🚦 Check Route Safety"):
     start = geocode_address(start_address, api_key)
     end = geocode_address(end_address, api_key)
 
-    if not (start and end):
-        st.error("Could not geocode one or both addresses. Try again with more specific inputs.")
+    if start is None or end is None:
+        st.error("Could not geocode one or both addresses. Please try more specific locations.")
         st.stop()
 
     st.success(f"Valid addresses found: {start_address} → {end_address}")
+
+    st.write(f"Start coordinates: {start}")
+    st.write(f"End coordinates: {end}")
 
     coords = get_route_coords(start, end, ors_client)
     if coords is None:
