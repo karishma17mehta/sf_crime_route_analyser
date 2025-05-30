@@ -26,9 +26,8 @@ def delivery_report(err, msg):
         print(f"✅ Delivered to {msg.topic()} [{msg.partition()}] @ offset {msg.offset()}")
 
 def fetch_sf_crime_data():
-    # Format timestamp properly
     one_hour_ago = (datetime.utcnow() - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
-    
+
     url = "https://data.sfgov.org/resource/wg3w-h783.json"
     params = {
         "$where": f"incident_datetime > '{one_hour_ago}'",
@@ -46,12 +45,22 @@ def fetch_sf_crime_data():
     count = 0
 
     for event in data:
+        # Extract coordinates
+        point = event.get("point", {})
+        if isinstance(point, dict):
+            event["longitude"] = point.get("coordinates", [None, None])[0]
+            event["latitude"] = point.get("coordinates", [None, None])[1]
+
+        elif "latitude" in event and "longitude" in event:
+            pass  # already flat lat/lon
+
+        else:
+            event["latitude"] = None
+            event["longitude"] = None
+
         event_json = json.dumps(event)
         producer.produce("crime-events", value=event_json, callback=delivery_report)
         count += 1
 
     producer.flush()
     print(f"✅ Sent {count} events.")
-
-if __name__ == "__main__":
-    fetch_sf_crime_data()
