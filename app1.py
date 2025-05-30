@@ -3,12 +3,13 @@ import os, joblib, json, threading
 from datetime import datetime
 from dotenv import load_dotenv
 from confluent_kafka import Consumer
-import pandas as pd
-import numpy as np
 import openrouteservice
 import folium
 from streamlit_folium import st_folium
-from utils import create_ors_client, geocode_address, get_route_coords, assess_route, iterative_reroute_min_risk, plot_route_on_map
+from utils import (
+    create_ors_client, geocode_address, get_route_coords,
+    assess_route, iterative_reroute_min_risk, plot_route_on_map
+)
 
 # --- Load environment variables ---
 load_dotenv("py.env")
@@ -46,7 +47,7 @@ def kafka_listener():
 
         try:
             event = json.loads(msg.value().decode('utf-8'))
-            print("\ud83d\udcec Kafka prediction received:", event)
+            print("📬 Kafka prediction received:", event)
             live_predictions.append(event)
             if len(live_predictions) > 20:
                 live_predictions.pop(0)
@@ -60,10 +61,10 @@ if "kafka_started" not in st.session_state:
 
 # --- Streamlit UI ---
 st.set_page_config(layout="wide")
-st.title("\ud83d\udee1\ufe0f SafeRoute: Real-Time Crime-Aware Navigation")
+st.title("🛡️ SafeRoute: Real-Time Crime-Aware Navigation")
 
 # --- Sidebar: Live Segment Predictions ---
-st.sidebar.header("\ud83d\udea8 Segment-Level Predictions")
+st.sidebar.header("🚨 Segment-Level Predictions")
 if live_predictions:
     for seg in reversed(live_predictions[-5:]):
         st.sidebar.markdown(f"""
@@ -75,11 +76,11 @@ else:
     st.sidebar.info("No predictions received yet.")
 
 # --- UI Input ---
-start_address = st.text_input("\ud83d\udccd Enter your starting address", "")
-end_address = st.text_input("\ud83c\udf1f Enter your destination address", "")
-hour = st.number_input("\u23f0 Hour of travel (0-23)", min_value=0, max_value=23, value=12)
-minute = st.number_input("\u23f1\ufe0f Minute of travel (0-59)", min_value=0, max_value=59, value=0)
-day_str = st.selectbox("\ud83d\udcc5 Day of the week", [
+start_address = st.text_input("📍 Enter your starting address", "")
+end_address = st.text_input("🏁 Enter your destination address", "")
+hour = st.number_input("⏰ Hour of travel (0-23)", min_value=0, max_value=23, value=12)
+minute = st.number_input("⏱️ Minute of travel (0-59)", min_value=0, max_value=59, value=0)
+day_str = st.selectbox("📅 Day of the week", [
     "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
 ])
 
@@ -87,7 +88,7 @@ day_str = st.selectbox("\ud83d\udcc5 Day of the week", [
 if 'route_result' not in st.session_state:
     st.session_state['route_result'] = None
 
-if st.button("\ud83d\udea6 Check Route Safety"):
+if st.button("🚦 Check Route Safety"):
     start = geocode_address(start_address, api_key)
     end = geocode_address(end_address, api_key)
 
@@ -96,13 +97,10 @@ if st.button("\ud83d\udea6 Check Route Safety"):
         st.stop()
 
     st.success(f"Valid addresses found: {start_address} → {end_address}")
-
-    st.write(f"\ud83d\udef0\ufe0f Debug: Start Coordinates → {start}")
-    st.write(f"\ud83d\udef0\ufe0f Debug: End Coordinates → {end}")
+    st.write(f"Start coordinates: {start}")
+    st.write(f"End coordinates: {end}")
 
     coords = get_route_coords(start, end, ors_client)
-    st.write(f"\ud83d\uddd8\ufe0f Debug: Route coords → {coords}")
-
     if coords is None:
         st.error("No route found between these locations.")
         st.stop()
@@ -120,21 +118,21 @@ if st.button("\ud83d\udea6 Check Route Safety"):
 # --- Display result ---
 if st.session_state['route_result']:
     result, start, end = st.session_state['route_result']
-    st.success(f"\ud83e\uddeb Route risk score: {result['avg_risk']:.2f}")
+    st.success(f"🧮 Route risk score: {result['avg_risk']:.2f}")
 
     if result["was_rerouted"]:
         if result["avg_risk"] <= 0.5:
-            st.info(f"\ud83d\udd01 Rerouted to avoid risk. Buffer used: {result['buffer_used']}")
+            st.info(f"🔁 Rerouted to avoid risk. Buffer used: {result['buffer_used']}")
         else:
-            st.warning("\u26a0\ufe0f Even rerouted route is high risk. Consider rescheduling.")
+            st.warning("⚠️ Even rerouted route is high risk. Consider rescheduling.")
     else:
         if result["avg_risk"] <= 0.5:
-            st.success("\u2705 Original route is safe. No rerouting required.")
+            st.success("✅ Original route is safe. No rerouting required.")
         else:
-            st.warning("\u26a0\ufe0f Original route is risky, and no safer path was found.")
+            st.warning("⚠️ Original route is risky, and no safer path was found.")
 
     # --- Show Map ---
-    st.subheader("\ud83d\uddfa\ufe0f Route Map")
+    st.subheader("🗺️ Route Map")
     if result.get("coords"):
         folium_map = plot_route_on_map(
             result["coords"], start, end, result["avg_risk"],
