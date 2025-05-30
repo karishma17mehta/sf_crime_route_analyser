@@ -24,8 +24,8 @@ ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Streamlit UI
 st.title("🚦 SAN FRANCISCO CRIME ROUTE ANALYSER")
-start = st.text_input("📍 Start location", "Union Square, San Francisco")
-end = st.text_input("🏁 End location", "Golden Gate Park, San Francisco")
+start = st.text_input("📍 Start location", "3250 16th street, San Francisco")
+end = st.text_input("🏁 End location", "123 Market street, San Francisco")
 
 col1, col2 = st.columns(2)
 with col1:
