@@ -2,8 +2,6 @@ import streamlit as st
 import os, joblib, json
 from datetime import datetime
 from dotenv import load_dotenv
-from kafka import KafkaConsumer
-import threading
 
 import pandas as pd
 import numpy as np
@@ -19,44 +17,6 @@ from utils import (
 load_dotenv("py.env")
 api_key = os.getenv("ORS_API_KEY")
 
-# --- Kafka listener setup ---
-live_events = []
-
-def kafka_listener():
-    print("Kafka listener thread starting!")
-    consumer = KafkaConsumer(
-        'crime-events',
-        bootstrap_servers='localhost:9092',
-        auto_offset_reset='earliest',
-        group_id='crime-risk-app',
-        value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-    )
-    print("Kafka consumer created, waiting for events...")
-    for msg in consumer:
-        live_events.append(msg.value)
-        if len(live_events) > 100:
-            del live_events[0:len(live_events)-100]
-
-# Launch the Kafka listener once
-if "kafka_started" not in st.session_state:
-    threading.Thread(target=kafka_listener, daemon=True).start()
-    st.session_state["kafka_started"] = True
-
-# --- Display sidebar live incidents ---
-st.sidebar.header("🚨 Live Crime Incidents")
-st.sidebar.write("Current number of incidents:", len(live_events))
-if live_events:
-    for event in reversed(live_events[-10:]):
-        t = event.get("datetime", "")
-        desc = event.get("description", "")
-        cat = event.get("category", "")
-        st.sidebar.write(f"**[{t}]**: {cat} - {desc}")
-else:
-    st.sidebar.write("No incidents yet. Waiting for Kafka events...")
-
-if st.sidebar.button("🔄 Refresh incidents"):
-    pass  # Just forces rerun
-
 # --- Load models & client ---
 clf = joblib.load("models/risk_model.joblib")
 ohe = joblib.load("models/encoder.joblib")
@@ -65,6 +25,25 @@ ors_client = create_ors_client(api_key)
 
 st.set_page_config(layout="wide")
 st.title("🛡️ SafeRoute: Real-Time Crime-Aware Navigation")
+
+# --- Sidebar: Segment-Level Predictions ---
+st.sidebar.header("🚨 Segment-Level Predictions")
+if os.path.exists("latest_prediction.json"):
+    with open("latest_prediction.json", "r") as f:
+        data = json.load(f)
+    segments = data.get("segments", [])
+    st.sidebar.write(f"Number of segments: {len(segments)}")
+    if segments:
+        for seg in reversed(segments[-5:]):
+            st.sidebar.markdown(f"""
+            **{seg.get("from", "Unknown")}**  
+            → `{seg.get("to", "Unknown")}`  
+            🔥 Risk Score: `{seg.get("risk_score", "N/A")}`
+            """)
+    else:
+        st.sidebar.info("No predictions yet.")
+else:
+    st.sidebar.warning("No prediction file found yet.")
 
 # --- UI Input ---
 start_address = st.text_input("📍 Enter your starting address", "")
@@ -130,22 +109,3 @@ if st.session_state['route_result']:
         st_folium(folium_map, width=700)
     else:
         st.error("Error rendering route on map.")
-
-    # --- Segment-level Prediction Chatbot Style ---
-    st.subheader("🧠 Segment-Level Risk Breakdown")
-    from consumer import get_latest_predictions
-
-    try:
-        segment_preds = get_latest_predictions()
-        if segment_preds:
-            for idx, seg in enumerate(segment_preds.get("segments", [])):
-                st.markdown(f"""
-                **Segment {idx+1}**
-                - 🧭 From: `{seg.get('from')}`
-                - 🧭 To: `{seg.get('to')}`
-                - 🚨 Predicted Risk: `{seg.get('risk_score', 'N/A'):.2f}`
-                """)
-        else:
-            st.info("No segment-level predictions available yet.")
-    except Exception as e:
-        st.warning(f"Error loading predictions: {e}")
