@@ -24,8 +24,8 @@ ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Streamlit UI
 st.title("🚦 Smart Crime-Aware Route Recommender")
-start = st.text_input("📍 Start location", "123 Market Street, San Francisco")
-end = st.text_input("🏁 End location", "3250 16th Street, San Francisco")
+start = st.text_input("📍 Start location", "Union Square, San Francisco")
+end = st.text_input("🏁 End location", "Golden Gate Park, San Francisco")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -35,9 +35,13 @@ with col2:
 
 if st.button("🧭 Find Safest Route"):
     with st.spinner("Calculating route and assessing safety..."):
+
+        st.write("🔎 Addresses:", start, "→", end)
+        
         try:
-            # Convert start/end to route coordinates
             coords = get_route_coords(start, end, ors_client)
+            st.write("📍 Route coords preview:", coords[:3] if coords else "None")
+
             if coords is None:
                 raise ValueError("Route coordinates could not be retrieved.")
         except Exception as e:
@@ -47,7 +51,6 @@ if st.button("🧭 Find Safest Route"):
         day_str = datetime.now().strftime("%A")
 
         try:
-            # Use positional args to avoid keyword issues
             result = iterative_reroute_min_risk(
                 coords,
                 start,
