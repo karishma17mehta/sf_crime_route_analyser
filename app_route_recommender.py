@@ -4,10 +4,13 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 import openrouteservice
+
 from utils import (
     get_route_coords,
     iterative_reroute_min_risk,
-    plot_route_on_map
+    plot_route_on_map,
+    fetch_live_crimes,
+    add_crime_markers
 )
 
 # Load environment variables
@@ -35,14 +38,11 @@ with col1:
 with col2:
     minute = st.slider("🕒 Minute of travel", 0, 59, datetime.now().minute)
 with col3:
-    day_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    default_day = datetime.now().strftime("%A")
-    day_str = st.selectbox("📆 Day of the week", options=day_options, index=day_options.index(default_day))
+    day_str = st.selectbox("📅 Day of week", day_labels, index=day_labels.index(datetime.now().strftime("%A")))
 
 if st.button("🧭 Find Safest Route"):
     with st.spinner("Calculating route and assessing safety..."):
-
-        st.markdown(f"🔎 **Searching route:** `{start}` → `{end}` on **{day_str} {hour:02}:{minute:02}**")
+        st.markdown(f"🔎 **Searching route:** `{start}` → `{end}`")
 
         try:
             coords = get_route_coords(start, end, ors_client)
@@ -82,12 +82,11 @@ if st.button("🧭 Find Safest Route"):
             - Rerouted path risk: **{round(result['avg_risk'], 2)}**
             - 🔁 **Risk reduced by:** `{round(result['original_risk'] - result['avg_risk'], 2)}`
             - Buffer offset used: `{result.get('buffer_used', 0)}` degrees
-            - 📆 Based on travel time: **{day_str}, {hour:02}:{minute:02}**
             """)
         else:
             st.success(f"✅ Original route is safe — risk score: **{round(result['avg_risk'], 2)}**")
 
-        # 🗺️ Plot the route on the map
+        # 🗺️ Plot route
         folium_map = plot_route_on_map(
             result["coords"],
             start,
@@ -96,15 +95,20 @@ if st.button("🧭 Find Safest Route"):
             risk_per_point=result["risk_per_point"],
             rerouted=result["was_rerouted"]
         )
-        st.components.v1.html(folium_map.get_root().render(), height=500)
 
-        # Optional: Explain how risk is calculated
-        with st.expander("📘 What is route risk?"):
+        # ➕ Add live crime incident markers
+        crime_data = fetch_live_crimes(minutes_ago=2880)
+        add_crime_markers(folium_map, crime_data)
+
+        st.components.v1.html(folium_map.get_root().render(), height=520)
+
+        with st.expander("📘 How is crime risk calculated?"):
             st.markdown("""
-            - The ML model scores crime **risk** at every step of the path.
-            - Scores are based on:
-              - 📍 **Latitude / Longitude**
-              - 🕒 **Hour** and **Minute** of travel
-              - 📆 **Day of week**
-            - If average risk exceeds `0.5`, rerouting is attempted using slight coordinate shifts.
+            Risk scores are based on:
+            - 📍 Location (latitude, longitude)
+            - 🕒 Hour & minute of travel
+            - 📅 Day of the week
+
+            The model is trained on historical SF crime data.
+            If risk > 0.5, the route is rerouted with a lateral buffer to reduce exposure to hotspots.
             """)
