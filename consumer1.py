@@ -23,11 +23,10 @@ def download_from_github(raw_url, dest_path):
 MODEL_URL = "https://raw.githubusercontent.com/karishma17mehta/sf_crime_route_analyser/main/models/risk_model.joblib"
 ENCODER_URL = "https://raw.githubusercontent.com/karishma17mehta/sf_crime_route_analyser/main/models/encoder.joblib"
 
-
 # Ensure models directory exists
 os.makedirs("models", exist_ok=True)
 
-# Download files if not present
+# Download model files if not already present
 if not os.path.exists("models/risk_model.joblib"):
     download_from_github(MODEL_URL, "models/risk_model.joblib")
 if not os.path.exists("models/encoder.joblib"):
@@ -79,14 +78,33 @@ try:
             hour = datetime.fromisoformat(incident_time).hour
             day = datetime.fromisoformat(incident_time).strftime("%A")
 
+            # Optional: fallback lat/lng if not provided
+            latitude = event.get("latitude", 37.7749)
+            longitude = event.get("longitude", -122.4194)
+
+            # Construct full input row
             row = {
-                "hour": hour,
-                "minute": 0,
+                "incident_hour": hour,
+                "incident_minute": 0,
+                "latitude": latitude,
+                "longitude": longitude,
                 "day_of_week_encoded": day
             }
 
-            X = ohe.transform(pd.DataFrame([row]))
-            risk = float(clf.predict_proba(X)[0][1])
+            df_input = pd.DataFrame([row])
+
+            # Encode categorical variable
+            day_encoded = ohe.transform(df_input[['day_of_week_encoded']])
+            day_encoded_df = pd.DataFrame(day_encoded, columns=ohe.get_feature_names_out(['day_of_week_encoded']))
+
+            # Final input to model
+            X_input = pd.concat([
+                df_input.drop(columns=['day_of_week_encoded']).reset_index(drop=True),
+                day_encoded_df.reset_index(drop=True)
+            ], axis=1)
+
+            # Predict risk
+            risk = float(clf.predict_proba(X_input)[0][1])
 
             segments.append({
                 "from": event.get("address", "unknown"),
@@ -108,3 +126,4 @@ except KeyboardInterrupt:
 finally:
     print("🧹 Closing Kafka consumer")
     consumer.close()
+
