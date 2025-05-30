@@ -12,3 +12,4 @@ kafka-python
 confluent-kafka
 joblib
 requests
+gdown
