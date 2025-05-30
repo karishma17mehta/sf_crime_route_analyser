@@ -26,19 +26,23 @@ ors_client = openrouteservice.Client(key=ORS_API_KEY)
 st.title("🚦 Smart Crime-Aware Route Recommender")
 st.markdown("Enter your start and end points to find a walking route optimized for **lower crime risk**.")
 
-start = st.text_input("📍 Start location", "3250 16th street, San Francisco")
-end = st.text_input("🏁 End location", "123 Market street, San Francisco")
+start = st.text_input("📍 Start location", "3250 16th Street, San Francisco")
+end = st.text_input("🏁 End location", "123 Market Street, San Francisco")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 with col1:
     hour = st.slider("🕐 Hour of travel", 0, 23, datetime.now().hour)
 with col2:
     minute = st.slider("🕒 Minute of travel", 0, 59, datetime.now().minute)
+with col3:
+    day_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    default_day = datetime.now().strftime("%A")
+    day_str = st.selectbox("📆 Day of the week", options=day_options, index=day_options.index(default_day))
 
 if st.button("🧭 Find Safest Route"):
     with st.spinner("Calculating route and assessing safety..."):
 
-        st.markdown(f"🔎 **Searching route:** `{start}` → `{end}`")
+        st.markdown(f"🔎 **Searching route:** `{start}` → `{end}` on **{day_str} {hour:02}:{minute:02}**")
 
         try:
             coords = get_route_coords(start, end, ors_client)
@@ -48,8 +52,6 @@ if st.button("🧭 Find Safest Route"):
         except Exception as e:
             st.error(f"❌ Could not geocode or retrieve route: {e}")
             st.stop()
-
-        day_str = datetime.now().strftime("%A")
 
         try:
             result = iterative_reroute_min_risk(
@@ -80,6 +82,7 @@ if st.button("🧭 Find Safest Route"):
             - Rerouted path risk: **{round(result['avg_risk'], 2)}**
             - 🔁 **Risk reduced by:** `{round(result['original_risk'] - result['avg_risk'], 2)}`
             - Buffer offset used: `{result.get('buffer_used', 0)}` degrees
+            - 📆 Based on travel time: **{day_str}, {hour:02}:{minute:02}**
             """)
         else:
             st.success(f"✅ Original route is safe — risk score: **{round(result['avg_risk'], 2)}**")
@@ -103,5 +106,5 @@ if st.button("🧭 Find Safest Route"):
               - 📍 **Latitude / Longitude**
               - 🕒 **Hour** and **Minute** of travel
               - 📆 **Day of week**
-            - If average risk exceeds 0.5, rerouting is attempted.
+            - If average risk exceeds `0.5`, rerouting is attempted using slight coordinate shifts.
             """)
