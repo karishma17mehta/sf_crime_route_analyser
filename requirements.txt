@@ -9,3 +9,5 @@ pandas
 numpy
 python-dotenv
 kafka-python
+confluent-kafka
+joblib
