@@ -23,7 +23,7 @@ day_labels = list(ohe.categories_[0])
 ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Streamlit UI
-st.title("🚦 Smart Crime-Aware Route Recommender")
+st.title("🚦 SAN FRANCISCO CRIME ROUTE ANALYSER")
 start = st.text_input("📍 Start location", "Union Square, San Francisco")
 end = st.text_input("🏁 End location", "Golden Gate Park, San Francisco")
 
