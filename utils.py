@@ -4,37 +4,35 @@ import folium
 import numpy as np
 
 def create_ors_client(api_key):
+    print("🔑 Creating ORS client...")
     return openrouteservice.Client(key=api_key)
 
 def geocode_address(address, api_key):
     client = create_ors_client(api_key)
     try:
+        print(f"📍 Geocoding address: {address}")
         geocode = client.pelias_search(text=address)
         coords = geocode['features'][0]['geometry']['coordinates']
-        return coords[0], coords[1]
+        print(f"✅ Coordinates for '{address}': {coords[1]}, {coords[0]}")
+        return coords[0], coords[1]  # (lon, lat)
     except Exception as e:
-        print("Geocoding error:", e)
+        print(f"❌ Geocoding error for '{address}':", e)
         return None
 
 def get_route_coords(start, end, client):
     try:
-        print(f"🧭 Requesting route from {start} to {end}")
+        print(f"🛣️ Requesting route from {start} to {end}")
         route = client.directions(
             coordinates=[start, end],
-            profile='driving-car',
+            profile='foot-walking',
             format='geojson'
         )
-        if "routes" not in route or not route["routes"]:
-            print("❌ No route returned in response!")
-            return None
-
         coords = convert.decode_polyline(route['routes'][0]['geometry'])['coordinates']
-        print(f"✅ Route found with {len(coords)} points.")
+        print(f"✅ Route found with {len(coords)} points")
         return coords
     except Exception as e:
         print(f"❌ Routing error: {e}")
         return None
-
 
 def assess_route(coords, hour, minute, day_str, clf, ohe, day_labels):
     day_encoded = ohe.transform([[day_str]])
@@ -61,6 +59,7 @@ def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, o
             "was_rerouted": False
         }
 
+    print("⚠️ High risk detected. Attempting reroute...")
     lat_offset = buffer
     reroute_coords = [(lat + lat_offset, lon) for lat, lon in coords]
 
