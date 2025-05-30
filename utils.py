@@ -4,7 +4,7 @@ import numpy as np
 import requests
 from datetime import datetime, timedelta
 
-def fetch_live_crimes(minutes_ago=720):
+def fetch_live_crimes(minutes_ago=1440):
     """Fetch recent crimes from SF Open Data within the last X minutes."""
     since_time = (datetime.now() - timedelta(minutes=minutes_ago)).isoformat()
     url = "https://data.sfgov.org/resource/wg3w-h783.json"
