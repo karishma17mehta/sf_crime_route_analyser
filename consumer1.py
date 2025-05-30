@@ -93,10 +93,11 @@ try:
 
             risk = float(clf.predict_proba(X_input)[0][1])
             prediction = {
-                "from": event.get("address", "unknown"),
+                "from": event.get("intersection") or event.get("address") or "unknown",
                 "to": "unknown",
                 "risk_score": round(risk, 2),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.utcnow().isoformat(),
+                "location": f"{event.get('analysis_neighborhood')} ({event.get('police_district')})"
             }
 
             # Send prediction to new topic
