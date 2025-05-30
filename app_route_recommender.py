@@ -23,26 +23,26 @@ day_labels = list(ohe.categories_[0])
 ors_client = openrouteservice.Client(key=ORS_API_KEY)
 
 # Streamlit UI
-st.title("🚦 SAN FRANCISCO CRIME ROUTE ANALYSER")
-start = st.text_input("📍 Start location", "3250 16th street, San Francisco")
-end = st.text_input("🏁 End location", "123 Market street, San Francisco")
+st.title("🚦 Smart Crime-Aware Route Recommender")
+st.markdown("Enter your start and end points to find a walking route optimized for **lower crime risk**.")
+
+start = st.text_input("📍 Start location", "Union Square, San Francisco")
+end = st.text_input("🏁 End location", "Golden Gate Park, San Francisco")
 
 col1, col2 = st.columns(2)
 with col1:
-    hour = st.slider("Hour", 0, 23, datetime.now().hour)
+    hour = st.slider("🕐 Hour of travel", 0, 23, datetime.now().hour)
 with col2:
-    minute = st.slider("Minute", 0, 59, datetime.now().minute)
+    minute = st.slider("🕒 Minute of travel", 0, 59, datetime.now().minute)
 
 if st.button("🧭 Find Safest Route"):
     with st.spinner("Calculating route and assessing safety..."):
 
-        st.write("🔎 Addresses:", start, "→", end)
-        
+        st.markdown(f"🔎 **Searching route:** `{start}` → `{end}`")
+
         try:
             coords = get_route_coords(start, end, ors_client)
-            st.write("🧭 Coordinates from ORS geocoding:", coords)
-            st.write("📍 Route coords preview:", coords[:3] if coords else "None")
-
+            st.write("🧭 First few route points:", coords[:3] if coords else "None")
             if coords is None:
                 raise ValueError("Route coordinates could not be retrieved.")
         except Exception as e:
@@ -64,19 +64,27 @@ if st.button("🧭 Find Safest Route"):
                 day_labels,
                 ors_client
             )
-
             if result is None or "coords" not in result:
                 raise ValueError("No valid route returned.")
         except Exception as e:
             st.error(f"❌ Rerouting failed: {e}")
             st.stop()
 
-        # Plot the final route
-        st.success(
-            f"✅ Route risk score: {round(result['avg_risk'], 2)}"
-            + (" — rerouted to avoid crime hotspots" if result["was_rerouted"] else " — original route is safe")
-        )
+        # ✅ Display route risk results
+        if result["was_rerouted"]:
+            st.warning("⚠️ High-risk segments were detected on the original route. Rerouting was applied to avoid crime hotspots.")
 
+            st.markdown(f"""
+            ### 🔍 Why rerouted?
+            - Original route risk: **{round(result['original_risk'], 2)}**
+            - Rerouted path risk: **{round(result['avg_risk'], 2)}**
+            - 🔁 **Risk reduced by:** `{round(result['original_risk'] - result['avg_risk'], 2)}`
+            - Buffer offset used: `{result.get('buffer_used', 0)}` degrees
+            """)
+        else:
+            st.success(f"✅ Original route is safe — risk score: **{round(result['avg_risk'], 2)}**")
+
+        # 🗺️ Plot the route on the map
         folium_map = plot_route_on_map(
             result["coords"],
             start,
@@ -86,3 +94,14 @@ if st.button("🧭 Find Safest Route"):
             rerouted=result["was_rerouted"]
         )
         st.components.v1.html(folium_map.get_root().render(), height=500)
+
+        # Optional: Explain how risk is calculated
+        with st.expander("📘 What is route risk?"):
+            st.markdown("""
+            - The ML model scores crime **risk** at every step of the path.
+            - Scores are based on:
+              - 📍 **Latitude / Longitude**
+              - 🕒 **Hour** and **Minute** of travel
+              - 📆 **Day of week**
+            - If average risk exceeds 0.5, rerouting is attempted.
+            """)
