@@ -38,14 +38,16 @@ if st.button("🧭 Find Safest Route"):
         try:
             # Convert start/end to route coordinates
             coords = get_route_coords(start, end, ors_client)
+            if coords is None:
+                raise ValueError("Route coordinates could not be retrieved.")
         except Exception as e:
-            st.error(f"❌ Could not geocode route: {e}")
+            st.error(f"❌ Could not geocode or retrieve route: {e}")
             st.stop()
 
         day_str = datetime.now().strftime("%A")
 
         try:
-            # ✅ FIXED: use positional arguments
+            # Use positional args to avoid keyword issues
             result = iterative_reroute_min_risk(
                 coords,
                 start,
@@ -56,8 +58,11 @@ if st.button("🧭 Find Safest Route"):
                 clf,
                 ohe,
                 day_labels,
-                ors_client  # no keyword here
+                ors_client
             )
+
+            if result is None or "coords" not in result:
+                raise ValueError("No valid route returned.")
         except Exception as e:
             st.error(f"❌ Rerouting failed: {e}")
             st.stop()
