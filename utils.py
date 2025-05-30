@@ -84,7 +84,9 @@ def iterative_reroute_min_risk(coords, start, end, hour, minute, day_str, clf, o
     }
 
 def plot_route_on_map(coords, start, end, risk_score, risk_per_point, rerouted=False):
-    m = folium.Map(location=[start[1], start[0]], zoom_start=13)
+    # Use first route point as [lat, lon]
+    first_point = coords[0]
+    m = folium.Map(location=[first_point[1], first_point[0]], zoom_start=13)
 
     folium.Marker([start[1], start[0]], tooltip="Start", icon=folium.Icon(color="green")).add_to(m)
     folium.Marker([end[1], end[0]], tooltip="End", icon=folium.Icon(color="red")).add_to(m)
