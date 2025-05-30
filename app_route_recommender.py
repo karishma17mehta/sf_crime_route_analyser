@@ -18,7 +18,7 @@ import pydeck as pdk
 load_dotenv("py11.env")  # or use st.secrets if on Streamlit Cloud
 
 # ORS client
-ors = openrouteservice.Client(key=os.getenv("ORS_API_KEY"))
+ors = openrouteservice.Client(key=st.secrets["ORS_API_KEY"])
 
 # Load model + encoder
 clf = joblib.load("models/risk_model.joblib")
