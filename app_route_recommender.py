@@ -1,26 +1,20 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
 import streamlit as st
 import pandas as pd
 import openrouteservice
-from openrouteservice import convert
 import joblib
-from datetime import datetime, timezone
+from datetime import datetime
 import os
 from dotenv import load_dotenv
 import pydeck as pdk
 
-# Load secrets
-load_dotenv("py11.env")  # or use st.secrets if on Streamlit Cloud
+# Load environment variables (for local testing)
+load_dotenv("py11.env")
 
-# ORS client
-ors = openrouteservice.Client(key=st.secrets["ORS_API_KEY"])
+# ORS client (switch between local or Streamlit Cloud secrets)
+ORS_API_KEY = os.getenv("ORS_API_KEY") or st.secrets["ORS_API_KEY"]
+ors = openrouteservice.Client(key=ORS_API_KEY)
 
-# Load model + encoder
+# Load model and encoder
 clf = joblib.load("models/risk_model.joblib")
 ohe = joblib.load("models/encoder.joblib")
 
@@ -30,53 +24,47 @@ start = st.text_input("Start location", "Union Square, San Francisco")
 end = st.text_input("End location", "Golden Gate Park, San Francisco")
 
 if st.button("Get Safest Route"):
-    with st.spinner("🧠 Scoring route options..."):
+    with st.spinner("🧠 Scoring your route..."):
+        # Get coordinates
         start_coords = ors.pelias_search(start)["features"][0]["geometry"]["coordinates"]
         end_coords = ors.pelias_search(end)["features"][0]["geometry"]["coordinates"]
         coords = [start_coords, end_coords]
 
+        # Get walking route as geojson
+        routes = ors.directions(coords, profile='foot-walking', format='geojson')
+        route = routes['features'][0]
+        points = route['geometry']['coordinates']
 
-        routes = ors.directions(coords, profile='driving-car', format='geojson', optimize_waypoints=True)
-        all_routes = routes['features']
+        # Sample route and predict risk
+        risks = []
+        for lon, lat in points[::10]:  # Sample every 10th point
+            hour = datetime.now().hour
+            day = datetime.now().strftime("%A")
+            row = {
+                "incident_hour": hour,
+                "incident_minute": 0,
+                "latitude": lat,
+                "longitude": lon,
+                "day_of_week_encoded": day
+            }
+            df = pd.DataFrame([row])
+            encoded = ohe.transform(df[['day_of_week_encoded']])
+            encoded_df = pd.DataFrame(encoded, columns=ohe.get_feature_names_out(['day_of_week_encoded']))
+            X = pd.concat([df.drop(columns=['day_of_week_encoded']), encoded_df], axis=1)
+            risk = clf.predict_proba(X)[0][1]
+            risks.append(risk)
 
-        best_route = None
-        lowest_risk = float('inf')
+        # Total risk
+        total_risk = sum(risks)
+        st.success(f"✅ Total risk score: {round(total_risk, 2)}")
 
-        for route in all_routes:
-            points = convert.decode_polyline(route['geometry'])['coordinates']
-            risks = []
-
-            for lon, lat in points[::10]:  # Sample every 10th point
-                hour = datetime.now().hour
-                day = datetime.now().strftime("%A")
-                row = {
-                    "incident_hour": hour,
-                    "incident_minute": 0,
-                    "latitude": lat,
-                    "longitude": lon,
-                    "day_of_week_encoded": day
-                }
-                df = pd.DataFrame([row])
-                encoded = ohe.transform(df[['day_of_week_encoded']])
-                encoded_df = pd.DataFrame(encoded, columns=ohe.get_feature_names_out(['day_of_week_encoded']))
-                X = pd.concat([df.drop(columns=['day_of_week_encoded']), encoded_df], axis=1)
-                risk = clf.predict_proba(X)[0][1]
-                risks.append(risk)
-
-            total_risk = sum(risks)
-            if total_risk < lowest_risk:
-                lowest_risk = total_risk
-                best_route = route
-
-        # Show best route on map
-        st.success(f"✅ Lowest risk score: {round(lowest_risk, 2)}")
-        line = pd.DataFrame(best_route['geometry']['coordinates'], columns=['lon', 'lat'])
-
+        # Map route
+        line = pd.DataFrame(points, columns=['lon', 'lat'])
         st.pydeck_chart(pdk.Deck(
             initial_view_state=pdk.ViewState(
                 latitude=line.lat.mean(),
                 longitude=line.lon.mean(),
-                zoom=12,
+                zoom=13,
                 pitch=0,
             ),
             layers=[
@@ -91,4 +79,3 @@ if st.button("Get Safest Route"):
                 )
             ],
         ))
-
