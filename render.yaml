@@ -12,3 +12,17 @@ services:
         sync: false
       - key: API_SECRET
         sync: false
+
+  - type: worker
+    name: sf-gov-producer
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python sf_api_producer.py"
+    envVars:
+      - key: BOOTSTRAP_SERVERS
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: API_SECRET
+        sync: false
