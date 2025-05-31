@@ -33,12 +33,19 @@ This app allows a user to:
 sf_crime_route_analyser/
 │
 ├── app_route_recommender.py # Main Streamlit app
+
 ├── utils.py # Routing, model scoring, rerouting, and plotting logic
+
 ├── models/
+
 │ ├── risk_model.joblib # Trained logistic regression classifier
+
 │ └── encoder.joblib # One-hot encoder for day of week
+
 ├── py.env # ORS API key (excluded from Git tracking)
+
 ├── requirements.txt # Python dependencies
+
 └── README.md # Project documentation
 
 ---
