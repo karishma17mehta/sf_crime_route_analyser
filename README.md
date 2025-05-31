@@ -1,5 +1,5 @@
 
-**# 🚦 SF Crime-Aware Route Recommender
+# 🚦 SF Crime-Aware Route Recommender
 
 A real-time Streamlit web app that recommends **safer walking routes** in San Francisco by integrating:
 
